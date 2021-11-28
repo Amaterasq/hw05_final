@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Об авторе проекта{% endblock %}
+{% block content %}
+
+<div class="container" >
+  <div class="row">
+    <div class="col-12 col-sm-12 col-md-6 col-lg-6 col-xl-6">
+      Текст обо мне (довставить)
+      <h3>Контакты для связи</h3>
+      <p>GitHub: <a href="https://github.com/Amaterasq">Amaterasq</a></p>
+      <p>Телефон: +7 (930) 767-97-71</p>
+      <p>Почта: <a href="">perepechcko.vlad@ya.ru</a></p>
+      <p>VK: @perepechcko</p>
+      <p>Телеграм: @amaterasutengu</p>
+    </div>
+    <div class="col-12 col-sm-12 col-md-6 col-lg-6 col-xl-6">
+      <img src="{% static 'photo.jpg' %}" width="671" height="450" class="d-inline-block align-top" alt="">
+    </div>
+  </div>
+</div>
+{% endblock %}
