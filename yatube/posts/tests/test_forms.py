@@ -1,7 +1,5 @@
 import shutil
 import tempfile
-from django.shortcuts import get_object_or_404
-from http import HTTPStatus
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -10,7 +8,7 @@ from django.conf import settings
 from django import forms
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from posts.models import Post, User, Group, Follow, Comment
+from posts.models import Post, User, Group, Comment
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
