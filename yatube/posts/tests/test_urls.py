@@ -3,8 +3,10 @@ from django.test import TestCase, Client
 from django.urls.base import reverse
 
 from posts.models import Post, Group, User
+# from yatube.posts.tests.test_routes import ADD_COMMENT_URL
 
 INDEX_URL = reverse('posts:index')
+FOLLOW_INDEX_URL = reverse('posts:follow_index')
 LOGIN_URL = reverse('users:login')
 POST_CREATE_URL = reverse('posts:post_create')
 UNEXSISTING_PAGE_URL = 'unexsisting_page/'
@@ -20,6 +22,11 @@ class PostsURLTests(TestCase):
         super().setUpClass()
         cls.author_of_post = User.objects.create_user(username='Ivan')
         cls.user = User.objects.create_user(username=USERNAME)
+        cls.guest = Client()
+        cls.another = Client()
+        cls.another.force_login(cls.user)
+        cls.author = Client()
+        cls.author.force_login(cls.author_of_post)
         cls.group = Group.objects.create(
             title='Тестовый заголовок',
             slug='test-slug',
@@ -38,16 +45,18 @@ class PostsURLTests(TestCase):
             'posts:post_edit',
             args=[cls.post.id]
         )
-
-    def setUp(self):
-        # Создаем неавторизованный клиент
-        self.guest = Client()
-        # Создаем авторизованый клиент
-        self.another = Client()
-        self.another.force_login(self.user)
-        # Создаем авторизованный клиент, автора поста
-        self.author = Client()
-        self.author.force_login(self.author_of_post)
+        cls.ADD_COMMENT_URL = reverse(
+            'posts:add_comment',
+            args=[cls.post.id]
+        )
+        cls.PROFILE_FOLLOW_URL = reverse(
+            'posts:profile_follow',
+            args=[cls.author_of_post]
+        )
+        cls.PROFILE_UNFOLLOW_URL = reverse(
+            'posts:profile_unfollow',
+            args=[cls.author_of_post]
+        )
 
     # Проверяем доступность всех страниц
     def test_accessibility_address(self):
@@ -62,6 +71,17 @@ class PostsURLTests(TestCase):
             [POST_CREATE_URL, self.guest, HTTPStatus.FOUND],
             [self.POST_EDIT_URL, self.guest, HTTPStatus.FOUND],
             [self.POST_EDIT_URL, self.another, HTTPStatus.FOUND],
+            [FOLLOW_INDEX_URL, self.another, HTTPStatus.OK],
+            [self.ADD_COMMENT_URL, self.another, HTTPStatus.FOUND],
+            [self.ADD_COMMENT_URL, self.author, HTTPStatus.FOUND],
+            [self.ADD_COMMENT_URL, self.guest, HTTPStatus.FOUND],
+            [self.PROFILE_FOLLOW_URL, self.another, HTTPStatus.FOUND],
+            [self.PROFILE_FOLLOW_URL, self.author, HTTPStatus.FOUND],
+            [self.PROFILE_FOLLOW_URL, self.guest, HTTPStatus.FOUND],
+            [self.PROFILE_UNFOLLOW_URL, self.another, HTTPStatus.FOUND],
+            [self.PROFILE_UNFOLLOW_URL, self.author, HTTPStatus.NOT_FOUND],
+            [self.PROFILE_UNFOLLOW_URL, self.guest, HTTPStatus.FOUND],
+
         ]
         for url, client, code in urls_client_status:
             with self.subTest(url=url, client=client, code=code):
@@ -80,6 +100,7 @@ class PostsURLTests(TestCase):
             [PROFILE_URL, 'posts/profile.html'],
             [self.POST_DETAIL_URL, 'posts/post_detail.html'],
             [self.POST_EDIT_URL, 'posts/create_post.html'],
+            [FOLLOW_INDEX_URL, 'posts/follow.html'],
         ]
         for url, template in urls_templates:
             with self.subTest(url=url, template=template):
@@ -96,6 +117,12 @@ class PostsURLTests(TestCase):
             [self.POST_EDIT_URL, self.guest,
              f'{LOGIN_URL}?next={self.POST_EDIT_URL}'],
             [self.POST_EDIT_URL, self.another, self.POST_DETAIL_URL],
+            [self.ADD_COMMENT_URL, self.guest,
+             f'{LOGIN_URL}?next={self.ADD_COMMENT_URL}'],
+            [self.PROFILE_FOLLOW_URL, self.guest,
+             f'{LOGIN_URL}?next={self.PROFILE_FOLLOW_URL}'],
+            [self.PROFILE_UNFOLLOW_URL, self.guest,
+             f'{LOGIN_URL}?next={self.PROFILE_UNFOLLOW_URL}'],
         ]
         for url, client, redirect in url_redirect:
             with self.subTest(url=url, client=client, redirect=redirect):

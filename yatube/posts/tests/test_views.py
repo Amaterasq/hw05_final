@@ -1,6 +1,5 @@
 import shutil
 import tempfile
-# from django.http import response
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -15,6 +14,7 @@ from yatube.settings import POSTS_ON_PAGE
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
 INDEX_URL = reverse('posts:index')
+FOLLOW_INDEX_URL = reverse('posts:follow_index')
 USERNAME = 'Ivan'
 PROFILE_URL = reverse('posts:profile', args=[USERNAME])
 SLUG = 'test-slug'
@@ -44,6 +44,11 @@ class PostsViewsTests(TestCase):
         super().setUpClass()
         cls.author = User.objects.create_user(username='Ivan')
         cls.user = User.objects.create_user(username='StasBasov')
+        cls.guest_client = Client()
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
+        cls.authorized_author = Client()
+        cls.authorized_author.force_login(cls.author)
         # Создадим 2 группы
         cls.group = Group.objects.create(
             title='Тестовый заголовок',
@@ -66,34 +71,39 @@ class PostsViewsTests(TestCase):
             'posts:post_detail',
             args=[cls.post.id]
         )
+        cls.PROFILE_FOLLOW_URL = reverse(
+            'posts:profile_follow',
+            args=['Ivan']
+        )
+        cls.PROFILE_UNFOLLOW_URL = reverse(
+            'posts:profile_unfollow',
+            args=['Ivan']
+        )
+        # Подписку юзера на автора
+        cls.follow = Follow.objects.create(
+            user=cls.user,
+            author=cls.author
+        )
 
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
-    def setUp(self):
-        # Создаем неавторизованный клиент
-        self.guest_client = Client()
-        # Создаем авторизованый клиент
-        self.authorized_client = Client()
-        self.authorized_client.force_login(self.user)
-        # Создаем авторизованный клиент, автора поста
-        self.authorized_author = Client()
-        self.authorized_author.force_login(self.author)
-
     def test_pages_show_correct_context(self):
-        """Страницы posts:index, posts:group_list, posts:profile, posts:post_detail
-           содержат ожидаемый контекст"""
+        """Страницы posts:index, posts:group_list, posts:profile, posts:post_detail,
+           posts:follow_index содержат ожидаемый контекст"""
         pages = [
             [INDEX_URL, 'page_obj'],
             [GROUP_LIST_URL, 'page_obj'],
             [PROFILE_URL, 'page_obj'],
             [self.POST_DETAIL_URL, 'post'],
+            [FOLLOW_INDEX_URL, 'page_obj'],
+
         ]
         for url, item in pages:
             with self.subTest(url=url):
-                response = self.guest_client.get(url)
+                response = self.authorized_client.get(url)
                 if item == 'page_obj':
                     self.assertEqual(len(response.context['page_obj']), 1)
                     post = response.context['page_obj'][0]
@@ -143,76 +153,33 @@ class PostsViewsTests(TestCase):
         response = self.guest_client.get(GROUP_LIST2_URL)
         self.assertNotIn(self.post.id, response.context['page_obj'])
 
-    def test_comments_authorized_client(self):
-        '''Комментировать запись может авторизованный пользователь,
-        после отправки комментария он появляется на странице записи'''
-        comments_count = Comment.objects.count()
-        form_data = {
-            'text': 'Тестовый комментарий',
-        }
-        response = self.authorized_client.post(
-            reverse('posts:add_comment', args=[self.post.id]),
-            data=form_data,
-            follow=True
-        )
-        created_comments = response.context['post'].comments.all()
-        self.assertEqual(len(created_comments), 1)
-        self.assertEqual(Comment.objects.count(), comments_count + 1)
-        self.assertRedirects(response, self.POST_DETAIL_URL,)
-        comment = self.post.comments.get()
-        self.assertEqual(comment.text, form_data['text'])
-        self.assertEqual(comment.author, self.user)
+    def test_authorized_client_following_author(self):
+        ''' Авторизованный пользователь может подписываться на авторов '''
+        self.authorized_client.get(self.PROFILE_FOLLOW_URL)
+        follow = Follow.objects.get(user=self.user)
+        self.assertEqual(follow.author, self.author)
 
-    def test_guest_client_cant_comments(self):
-        ''' Неавторизованный пользователь не может оставить комментарий '''
-        comments_count = Comment.objects.count()
-        form_data = {
-            'text': 'Тестовый комментарий',
-        }
-        self.guest_client.post(
-            reverse('posts:add_comment', args=[self.post.id]),
-            data=form_data,
-            follow=True
-        )
-        self.assertEqual(Comment.objects.count(), comments_count)
-
-    def test_authorized_client_following_and_unfollowing_author(self):
-        self.authorized_client.get(reverse(
-            'posts:profile_follow', args=['Ivan'])
-        )
-        self.assertEqual(
-            Follow.objects.filter(user=self.user).count(),
-            1
-        )
-        self.authorized_client.get(reverse(
-            'posts:profile_unfollow', args=['Ivan'])
-        )
-        self.assertEqual(
-            Follow.objects.filter(user=self.user).count(),
-            0
+    def test_authorized_client_unfollowing_author(self):
+        ''' Авторизованный пользователь может отписываться от авторов '''
+        self.authorized_client.get(self.PROFILE_UNFOLLOW_URL)
+        self.assertFalse(Follow.objects.filter(
+            user=self.user,
+            author=self.author).exists()
         )
 
     def test_posts_with_following_on_follow_index(self):
-        self.authorized_client.get(reverse(
-            'posts:profile_follow', args=['Ivan'])
+        ''' При подписке авторизованый пользователь видит записи на
+        странице избранное, и не видит при отписке  '''
+        self.authorized_client.get(self.PROFILE_FOLLOW_URL)
+        post = Post.objects.filter(author__following__user=self.user)
+        self.assertEqual(len(post), 1)
+        self.assertEqual(post.get(), self.post)
+
+        self.authorized_client.get(self.PROFILE_UNFOLLOW_URL)
+        self.assertNotIn(
+            self.post,
+            Post.objects.filter(author__following__user=self.user)
         )
-        response = self.authorized_client.get(reverse(
-            'posts:follow_index')
-        )
-        self.assertEqual(len(response.context['page_obj']), 1)
-        post = response.context['page_obj'][0]
-        self.assertEqual(post.text, self.post.text)
-        self.assertEqual(post.author, self.post.author)
-        self.assertEqual(post.pk, self.post.id)
-        self.assertEqual(post.group, self.post.group)
-        self.assertEqual(post.image, self.post.image)
-        self.authorized_client.get(reverse(
-            'posts:profile_unfollow', args=['Ivan'])
-        )
-        response = self.authorized_client.get(reverse(
-            'posts:follow_index')
-        )
-        self.assertNotIn(self.post.id, response.context['page_obj'])
 
 
 class PaginatorViewsTest(TestCase):

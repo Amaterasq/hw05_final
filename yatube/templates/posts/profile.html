@@ -7,6 +7,7 @@
   <div class="container">
     <h1>Все посты пользователя {{ author.get_full_name }} </h1>
     <h3>Всего постов: {{ author.posts.count }} </h3>
+    <!-- Мб добавить статистики для автора (подписки и др) -->
     <div class="mb-5">
        {% if following %}
          <a
@@ -15,7 +16,7 @@
          >
           Отписаться
          </a>
-       {% else %}
+       {% elif not following and author != user %}
          <a
           class="btn btn-lg btn-primary"
           href="{% url 'posts:profile_follow' author.username %}" role="button"
@@ -25,26 +26,7 @@
        {% endif %}
     </div>
     {% for post in page_obj %}
-      <article class="col-12 col-md-9">
-        <ul>
-          <li>
-            Автор: {{ post.author.get_full_name }}
-            <a href="{% url 'posts:profile' author.username %}">все посты пользователя</a>
-          </li>
-          <li>
-            Дата публикации: {{ post.pub_date|date:"d E Y" }}
-          </li>
-        </ul>
-        {% thumbnail post.image "960x339" crop="center" upscale=True as im %}
-          <img class="card-img my-1" src="{{ im.url }}">
-        {% endthumbnail %}
-        <p>{{ post.text|linebreaks }}</p>
-        <a href="{% url 'posts:post_detail' post.id %}">подробная информация</a>
-      </article>
-      {% if post.group %}
-        <p> все записи группы: <a href="{% url 'posts:group_list' post.group.slug %}"> {{ post.group }}</a></p>
-      {% endif %}
-      {% if not forloop.last %}<hr>{% endif %}
+        {% include 'posts/includes/post.html' %}
     {% endfor %}
     {% include 'posts/includes/paginator.html' %} 
   </div>

@@ -14,7 +14,7 @@ class Group(models.Model):
 
     class Meta:
         verbose_name_plural = 'Группы'
-        verbose_name = 'Группы'
+        verbose_name = 'Группа'
 
     def __str__(self):
         return self.title
@@ -99,7 +99,6 @@ class Follow(models.Model):
         related_name='following',
         verbose_name='Автор',
     )
-    created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
@@ -108,7 +107,8 @@ class Follow(models.Model):
                 name='unique_follow'
             )
         ]
-        ordering = ('-created',)
+        verbose_name_plural = 'Подписки'
+        verbose_name = 'Подписка'
 
     def __str__(self):
-        return f'{self.author}'
+        return f'{self.user}-{self.author}'

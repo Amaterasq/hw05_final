@@ -10,7 +10,7 @@ class PostModelTest(TestCase):
         cls.user = User.objects.create_user(username='Ivan')
         cls.post = Post.objects.create(
             author=cls.user,
-            text='АААААААААААААААААААААААААААААА',
+            text='А' * 30,
         )
 
     def test_posts_verbose_name_label(self):
