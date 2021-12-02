@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import copy
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -15,13 +16,21 @@ TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
 INDEX_URL = reverse('posts:index')
 FOLLOW_INDEX_URL = reverse('posts:follow_index')
-USERNAME = 'Ivan'
-PROFILE_URL = reverse('posts:profile', args=[USERNAME])
+AUTHOR_USERNAME = 'Ivan'
+PROFILE_URL = reverse('posts:profile', args=[AUTHOR_USERNAME])
 SLUG = 'test-slug'
 SLUG2 = 'test-slug2'
 GROUP_LIST_URL = reverse('posts:group_list', args=[SLUG])
 GROUP_LIST2_URL = reverse('posts:group_list', args=[SLUG2])
 # 6 спринт
+PROFILE_FOLLOW_URL = reverse(
+    'posts:profile_follow',
+    args=[AUTHOR_USERNAME]
+)
+PROFILE_UNFOLLOW_URL = reverse(
+    'posts:profile_unfollow',
+    args=[AUTHOR_USERNAME]
+)
 POST_IMAGE_TEST = (
     b'\x47\x49\x46\x38\x39\x61\x02\x00'
     b'\x01\x00\x80\x00\x00\x00\x00\x00'
@@ -42,7 +51,7 @@ class PostsViewsTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.author = User.objects.create_user(username='Ivan')
+        cls.author = User.objects.create_user(username=AUTHOR_USERNAME)
         cls.user = User.objects.create_user(username='StasBasov')
         cls.guest_client = Client()
         cls.authorized_client = Client()
@@ -71,19 +80,6 @@ class PostsViewsTests(TestCase):
             'posts:post_detail',
             args=[cls.post.id]
         )
-        cls.PROFILE_FOLLOW_URL = reverse(
-            'posts:profile_follow',
-            args=['Ivan']
-        )
-        cls.PROFILE_UNFOLLOW_URL = reverse(
-            'posts:profile_unfollow',
-            args=['Ivan']
-        )
-        # Подписку юзера на автора
-        cls.follow = Follow.objects.create(
-            user=cls.user,
-            author=cls.author
-        )
 
     @classmethod
     def tearDownClass(cls):
@@ -93,6 +89,10 @@ class PostsViewsTests(TestCase):
     def test_pages_show_correct_context(self):
         """Страницы posts:index, posts:group_list, posts:profile, posts:post_detail,
            posts:follow_index содержат ожидаемый контекст"""
+        Follow.objects.create(
+            user=self.user,
+            author=self.author
+        )
         pages = [
             [INDEX_URL, 'page_obj'],
             [GROUP_LIST_URL, 'page_obj'],
@@ -115,25 +115,6 @@ class PostsViewsTests(TestCase):
                 self.assertEqual(post.group, self.post.group)
                 self.assertEqual(post.image, self.post.image)
 
-    def test_page_index_cache(self):
-        ''' Тест, проверяющий работу кэша '''
-        cache_post = Post.objects.create(
-            text='Тест кэша',
-            author=self.author,
-            group=self.group,
-        )
-        response = self.guest_client.get(INDEX_URL)
-        self.assertEqual(response.context['page_obj'][0].text, cache_post.text)
-        cache_post.delete()
-        self.assertEqual(response.context['page_obj'][0].text, cache_post.text)
-        # CACHES.clear()
-        cache.clear()
-        response = self.guest_client.get(INDEX_URL)
-        self.assertNotEqual(
-            response.context['page_obj'][0].text,
-            cache_post.text
-        )
-
     def test_group_pages_show_correct_constant_context(self):
         '''На страницу группы выводится объявленная группа'''
         response = self.guest_client.get(GROUP_LIST_URL)
@@ -153,33 +134,39 @@ class PostsViewsTests(TestCase):
         response = self.guest_client.get(GROUP_LIST2_URL)
         self.assertNotIn(self.post.id, response.context['page_obj'])
 
-    def test_authorized_client_following_author(self):
-        ''' Авторизованный пользователь может подписываться на авторов '''
-        self.authorized_client.get(self.PROFILE_FOLLOW_URL)
-        follow = Follow.objects.get(user=self.user)
-        self.assertEqual(follow.author, self.author)
-
-    def test_authorized_client_unfollowing_author(self):
-        ''' Авторизованный пользователь может отписываться от авторов '''
-        self.authorized_client.get(self.PROFILE_UNFOLLOW_URL)
+    def test_authorized_client_following_unfollowing_author(self):
+        ''' Авторизованный пользователь может подписываться и
+        отписываться от авторов '''
+        # self.assertFalse(Follow.objects.filter(user=self.user).exists()) ?
+        self.authorized_client.get(PROFILE_FOLLOW_URL)
+        self.assertTrue(Follow.objects.filter(user=self.user).exists())
+        self.authorized_client.get(PROFILE_UNFOLLOW_URL)
         self.assertFalse(Follow.objects.filter(
             user=self.user,
             author=self.author).exists()
         )
 
-    def test_posts_with_following_on_follow_index(self):
-        ''' При подписке авторизованый пользователь видит записи на
-        странице избранное, и не видит при отписке  '''
-        self.authorized_client.get(self.PROFILE_FOLLOW_URL)
-        post = Post.objects.filter(author__following__user=self.user)
-        self.assertEqual(len(post), 1)
-        self.assertEqual(post.get(), self.post)
-
-        self.authorized_client.get(self.PROFILE_UNFOLLOW_URL)
-        self.assertNotIn(
-            self.post,
-            Post.objects.filter(author__following__user=self.user)
+    def test_posts_with_unfollowing_on_follow_index(self):
+        ''' При отписке авторизованый пользователь не видит записи на
+        странице избранное'''
+        Follow.objects.create(
+            user=self.user,
+            author=self.author
         )
+        self.authorized_client.get(PROFILE_UNFOLLOW_URL)
+        response = self.authorized_client.get(FOLLOW_INDEX_URL)
+        self.assertNotIn(self.post.id, response.context['page_obj'])
+
+    def test_page_index_cache(self):
+        post = copy.copy(self.post)
+        cache.clear()
+        page_content1 = self.guest_client.get(INDEX_URL).content
+        post.delete()
+        page_content2 = self.guest_client.get(INDEX_URL).content
+        self.assertEqual(page_content1, page_content2)
+        cache.clear()
+        page_content3 = self.guest_client.get(INDEX_URL).content
+        self.assertNotEqual(page_content1, page_content3)
 
 
 class PaginatorViewsTest(TestCase):

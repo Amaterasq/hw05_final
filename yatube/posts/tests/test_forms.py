@@ -58,6 +58,10 @@ class PostsFormsTests(TestCase):
             'posts:post_detail',
             kwargs={'post_id': cls.post.id}
         )
+        cls.ADD_COMMENT_URL = reverse(
+            'posts:add_comment',
+            args=[cls.post.id]
+        )
         cls.guest_client = Client()
         cls.authorized_client = Client()
         cls.authorized_client.force_login(cls.user)
@@ -69,8 +73,8 @@ class PostsFormsTests(TestCase):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
-    def test_create_post(self):
-        """Создание записи через форму"""
+    def test_create_post_authorized(self):
+        """Создание записи через форму авторизованным клиентом"""
         post_count = Post.objects.count()
         form_data = {
             'text': 'Тестовый текст',
@@ -96,19 +100,29 @@ class PostsFormsTests(TestCase):
         self.assertEqual(created_post.group.id, form_data['group'])
         self.assertTrue(created_post.image)
 
-    def test_edit_post(self):
-        """Редактирование записи"""
-        post_image_edit = (
-            b'\x47\x49\x46\x38\x39\x61\x02\x00'
-            b'\x01\x00\x80\x00\x00\x00\x00\x00'
-            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-            b'\x0A\x00\x3B'
+    def test_guest_cant_create_post(self):
+        ''' Неавторизованный пользователь не может создать пост '''
+        post_count = Post.objects.count()
+        existing_posts_ids = set(Post.objects.all().values_list(
+            'id', flat=True)
         )
+        form_data = {
+            'text': 'Тестовый пост',
+        }
+        self.guest_client.post(
+            POST_CREATE_URL,
+            data=form_data,
+            follow=True
+        )
+        created_posts = Post.objects.exclude(id__in=existing_posts_ids)
+        self.assertEqual(Post.objects.count(), post_count)
+        self.assertEqual(created_posts.count(), 0)
+
+    def test_author_edit_post(self):
+        """Редактирование записи автором"""
         UPLOADED_IMAGE2 = SimpleUploadedFile(
             name='small.gif',
-            content=post_image_edit,
+            content=POST_IMAGE_TEST,
             content_type='image/gif'
         )
         edit_group = Group.objects.create(
@@ -133,6 +147,24 @@ class PostsFormsTests(TestCase):
         self.assertEqual(edit_post.group.id, edit_data['group'])
         self.assertTrue(edit_post.image)
 
+    def test_guest_edit_post(self):
+        '''Неавторизованный и неавтор не может редактировать запись'''
+        edit_data = {
+            'text': 'Изменённый текст'
+        }
+        cases = [
+            self.guest_client,
+            self.authorized_client,
+        ]
+        for client in cases:
+            with self.subTest(client=client):
+                client.post(
+                    self.POST_EDIT_URL,
+                    data=edit_data,
+                    follow=True
+                )
+                self.assertFalse(self.post.text == edit_data['text'])
+
     def test_post_create_page_show_correct_context(self):
         """Шаблон post_create сформирован с правильным контекстом."""
         response = self.authorized_client.get(POST_CREATE_URL)
@@ -147,13 +179,13 @@ class PostsFormsTests(TestCase):
 
     def test_comments_authorized_client(self):
         '''Комментировать запись может авторизованный пользователь,
-        после отправки комментария он появляется на странице записи'''
+        после отправки комментарий появляется на странице записи'''
         comments_count = Comment.objects.count()
         form_data = {
             'text': 'Тестовый комментарий',
         }
         response = self.authorized_client.post(
-            reverse('posts:add_comment', args=[self.post.id]),
+            self.ADD_COMMENT_URL,
             data=form_data,
             follow=True
         )
@@ -161,24 +193,21 @@ class PostsFormsTests(TestCase):
         self.assertEqual(len(created_comments), 1)
         self.assertEqual(Comment.objects.count(), comments_count + 1)
         self.assertRedirects(response, self.POST_DETAIL_URL,)
-        comment = self.post.comments.get()
+        comment = response.context['post'].comments.get()
         self.assertEqual(comment.text, form_data['text'])
         self.assertEqual(comment.author, self.user)
         self.assertEqual(comment.post, self.post)
 
     def test_guest_client_cant_comments(self):
-        ''' Неавторизованный пользователь не может оставить комментарий '''
+        '''Неавторизованный пользователь не может оставить комментарий'''
         comments_count = Comment.objects.count()
         form_data = {
             'text': 'Тестовый комментарий',
         }
         self.guest_client.post(
-            reverse('posts:add_comment', args=[self.post.id]),
+            self.ADD_COMMENT_URL,
             data=form_data,
             follow=True
         )
         self.assertEqual(Comment.objects.count(), comments_count)
-        self.assertNotIn(
-            self.post,
-            Comment.objects.filter(text__exact=form_data['text'])
-        )
+        self.assertEqual(self.post.comments.count(), 0)

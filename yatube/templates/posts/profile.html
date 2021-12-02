@@ -7,8 +7,10 @@
   <div class="container">
     <h1>Все посты пользователя {{ author.get_full_name }} </h1>
     <h3>Всего постов: {{ author.posts.count }} </h3>
-    <!-- Мб добавить статистики для автора (подписки и др) -->
-    <div class="mb-5">
+    <h3>Подписок: {{ author.follower.count }} </h3>
+    <h3>Подписчиков: {{ author.following.count }} </h3>
+    {% if author != request.user and request.user.is_authenticated %}
+      <div class="mb-5">
        {% if following %}
          <a
           class="btn btn-lg btn-light"
@@ -16,7 +18,7 @@
          >
           Отписаться
          </a>
-       {% elif not following and author != user %}
+       {% elif not following %}
          <a
           class="btn btn-lg btn-primary"
           href="{% url 'posts:profile_follow' author.username %}" role="button"
@@ -24,7 +26,8 @@
           Подписаться
          </a>
        {% endif %}
-    </div>
+      </div>
+    {% endif %}
     {% for post in page_obj %}
         {% include 'posts/includes/post.html' %}
     {% endfor %}

@@ -111,4 +111,4 @@ class Follow(models.Model):
         verbose_name = 'Подписка'
 
     def __str__(self):
-        return f'{self.user}-{self.author}'
+        return f'Пользователь: {self.user} - Автор: {self.author}'

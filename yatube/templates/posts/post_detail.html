@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% block title %} {{ post }} {% endblock %}
+{% block title %} {{ post.text }} {% endblock %}
 {% load user_filters %}
 {% block content %}
   <div class="container py-1">
-    {% include 'posts/includes/post.html' %}
+    {% include 'posts/includes/post.html' with post_detail=True %}
     {% include 'posts/includes/comments.html' %}
   </div>
 {% endblock %}

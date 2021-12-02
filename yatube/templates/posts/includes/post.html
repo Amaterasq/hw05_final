@@ -12,14 +12,14 @@
     <img class="card-img my-1" src="{{ im.url }}">
   {% endthumbnail %}
   <p>{{ post.text|linebreaks }}</p>
-  {% if post.author == user %}
+  {% if post_detail and post.author == user %}
     <a class="btn btn-primary" href="{% url 'posts:post_edit' post.id %}">
       Редактировать запись
     </a>
   {% endif %}
   <a class="btn btn-primary" href="{% url 'posts:post_detail' post.id %}">Подробная информация</a>
 </article>
-{% if post.group %}
+{% if not group_list and post.group %}
   <p> Все записи группы: <a href="{% url 'posts:group_list' post.group.slug %}"> {{ post.group }}</a></p>
 {% endif %}
-{% if not forloop.last %}<hr>{% endif %}
+<!-- {% if not forloop.last %}<hr>{% endif %} -->
