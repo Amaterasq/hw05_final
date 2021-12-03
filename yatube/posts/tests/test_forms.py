@@ -73,6 +73,9 @@ class PostsFormsTests(TestCase):
             'posts:add_comment',
             args=[cls.post.id]
         )
+        cls.EDIT_REDIRECT_GUEST_URL = (
+            f'/auth/login/?next=/posts/{cls.post.id}/edit/'
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -107,7 +110,7 @@ class PostsFormsTests(TestCase):
         self.assertTrue(created_post.image)
 
     def test_guest_cant_create_post(self):
-        ''' Неавторизованный пользователь не может создать пост '''
+        '''Неавторизованный пользователь не может создать пост'''
         post_count = Post.objects.count()
         existing_posts_ids = set(Post.objects.all().values_list(
             'id', flat=True)
@@ -165,8 +168,7 @@ class PostsFormsTests(TestCase):
         }
         cases = [
             [self.authorized_client, self.POST_DETAIL_URL],
-            [self.guest_client,
-             f'/auth/login/?next=/posts/{self.post.id}/edit/'],
+            [self.guest_client, self.EDIT_REDIRECT_GUEST_URL],
         ]
         for client, redirect_url in cases:
             with self.subTest(client=client):
