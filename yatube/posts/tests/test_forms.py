@@ -1,6 +1,5 @@
 import shutil
 import tempfile
-import copy
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -160,7 +159,6 @@ class PostsFormsTests(TestCase):
             content=POST_IMAGE_TEST,
             content_type='image/gif'
         )
-        exist_post = copy.copy(self.post)
         edit_data = {
             'text': 'Изменённый текст',
             'group': self.edit_group.id,
@@ -178,11 +176,11 @@ class PostsFormsTests(TestCase):
                     follow=True
                 )
                 self.assertRedirects(response, redirect_url)
-                try_edit_post = Post.objects.get()
-                self.assertEqual(exist_post.text, try_edit_post.text)
-                self.assertEqual(exist_post.author, try_edit_post.author)
-                self.assertEqual(exist_post.group, try_edit_post.group)
-                self.assertEqual(exist_post.image, try_edit_post.image)
+                try_edit_post = Post.objects.get(id=self.post.id)
+                self.assertEqual(self.post.text, try_edit_post.text)
+                self.assertEqual(self.post.author, try_edit_post.author)
+                self.assertEqual(self.post.group, try_edit_post.group)
+                self.assertEqual(self.post.image, try_edit_post.image)
 
     def test_post_create_page_show_correct_context(self):
         """Шаблон post_create сформирован с правильным контекстом."""
@@ -210,7 +208,7 @@ class PostsFormsTests(TestCase):
         )
         created_comments = Comment.objects.all()
         self.assertEqual(len(created_comments), 1)
-        self.assertEqual(Comment.objects.count(), comments_count + 1)
+        self.assertEqual(created_comments.count(), comments_count + 1)
         self.assertRedirects(response, self.POST_DETAIL_URL,)
         comment = response.context['post'].comments.get()
         self.assertEqual(comment.text, form_data['text'])
@@ -230,4 +228,3 @@ class PostsFormsTests(TestCase):
         )
         self.assertEqual(Comment.objects.count(), comments_count)
         self.assertEqual(Comment.objects.all().count(), 0)
-        self.assertEqual(self.post.comments.count(), 0)

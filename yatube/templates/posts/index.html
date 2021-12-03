@@ -7,7 +7,7 @@
     <h1>Последние обновления на сайте</h1>
     {% cache 20 index_cache %}
       {% for post in page_obj %}
-        {% include 'posts/includes/post.html' with records_group=True %}
+        {% include 'posts/includes/post.html' %}
         {% if not forloop.last %}<hr>{% endif %}
       {% endfor %}
     {% endcache %}

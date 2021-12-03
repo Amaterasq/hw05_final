@@ -5,7 +5,7 @@
     <h1>{{ group }}</h1>
     <p>{{ group.description|linebreaks }}</p>
     {% for post in page_obj %}
-      {% include 'posts/includes/post.html' %}
+      {% include 'posts/includes/post.html' with not_group_link=True %}
       {% if not forloop.last %}<hr>{% endif %}
     {% endfor %}
     {% include 'posts/includes/paginator.html' %}
