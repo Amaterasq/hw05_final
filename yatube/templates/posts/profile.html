@@ -9,7 +9,7 @@
     <h3>Всего постов: {{ author.posts.count }} </h3>
     <h3>Подписок: {{ author.follower.count }} </h3>
     <h3>Подписчиков: {{ author.following.count }} </h3>
-    {% if author != request.user and request.user.is_authenticated %}
+    {% if author != user and user.is_authenticated %}
       <div class="mb-5">
        {% if following %}
          <a
@@ -29,7 +29,8 @@
       </div>
     {% endif %}
     {% for post in page_obj %}
-        {% include 'posts/includes/post.html' %}
+        {% include 'posts/includes/post.html' with records_group=True %}
+        {% if not forloop.last %}<hr>{% endif %}
     {% endfor %}
     {% include 'posts/includes/paginator.html' %} 
   </div>

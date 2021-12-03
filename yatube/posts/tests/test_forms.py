@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import copy
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -38,11 +39,21 @@ class PostsFormsTests(TestCase):
         super().setUpClass()
         cls.author = User.objects.create_user(username='Ivan')
         cls.user = User.objects.create_user(username=USERNAME)
-        # Создадим группу
+        cls.guest_client = Client()
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
+        cls.authorized_author = Client()
+        cls.authorized_author.force_login(cls.author)
+        # Создадим группы
         cls.group = Group.objects.create(
             title='Тестовый заголовок',
             slug='test-slug',
             description='Тестовый текст',
+        )
+        cls.edit_group = Group.objects.create(
+            title='Группа для редактирования поста',
+            slug='test-slug-edit',
+            description='Описание'
         )
         # Создадим пост
         cls.post = Post.objects.create(
@@ -52,21 +63,16 @@ class PostsFormsTests(TestCase):
         )
         cls.POST_EDIT_URL = reverse(
             'posts:post_edit',
-            kwargs={'post_id': cls.post.id}
+            args=[cls.post.id]
         )
         cls.POST_DETAIL_URL = reverse(
             'posts:post_detail',
-            kwargs={'post_id': cls.post.id}
+            args=[cls.post.id]
         )
         cls.ADD_COMMENT_URL = reverse(
             'posts:add_comment',
             args=[cls.post.id]
         )
-        cls.guest_client = Client()
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(cls.user)
-        cls.authorized_author = Client()
-        cls.authorized_author.force_login(cls.author)
 
     @classmethod
     def tearDownClass(cls):
@@ -108,6 +114,8 @@ class PostsFormsTests(TestCase):
         )
         form_data = {
             'text': 'Тестовый пост',
+            'group': self.group.id,
+            'image': UPLOADED_IMAGE,
         }
         self.guest_client.post(
             POST_CREATE_URL,
@@ -125,14 +133,9 @@ class PostsFormsTests(TestCase):
             content=POST_IMAGE_TEST,
             content_type='image/gif'
         )
-        edit_group = Group.objects.create(
-            title='Группа для редактирования поста',
-            slug='test-slug-edit',
-            description='Описание'
-        )
         edit_data = {
             'text': 'Отредактированный текст',
-            'group': edit_group.id,
+            'group': self.edit_group.id,
             'image': UPLOADED_IMAGE2,
         }
         response = self.authorized_author.post(
@@ -147,23 +150,37 @@ class PostsFormsTests(TestCase):
         self.assertEqual(edit_post.group.id, edit_data['group'])
         self.assertTrue(edit_post.image)
 
-    def test_guest_edit_post(self):
+    def test_guest_and_another_cant_edit_post(self):
         '''Неавторизованный и неавтор не может редактировать запись'''
+        UPLOADED_IMAGE2 = SimpleUploadedFile(
+            name='small.gif',
+            content=POST_IMAGE_TEST,
+            content_type='image/gif'
+        )
+        exist_post = copy.copy(self.post)
         edit_data = {
-            'text': 'Изменённый текст'
+            'text': 'Изменённый текст',
+            'group': self.edit_group.id,
+            'image': UPLOADED_IMAGE2,
         }
         cases = [
-            self.guest_client,
-            self.authorized_client,
+            [self.authorized_client, self.POST_DETAIL_URL],
+            [self.guest_client,
+             f'/auth/login/?next=/posts/{self.post.id}/edit/'],
         ]
-        for client in cases:
+        for client, redirect_url in cases:
             with self.subTest(client=client):
-                client.post(
+                response = client.post(
                     self.POST_EDIT_URL,
                     data=edit_data,
                     follow=True
                 )
-                self.assertFalse(self.post.text == edit_data['text'])
+                self.assertRedirects(response, redirect_url)
+                try_edit_post = Post.objects.get()
+                self.assertEqual(exist_post.text, try_edit_post.text)
+                self.assertEqual(exist_post.author, try_edit_post.author)
+                self.assertEqual(exist_post.group, try_edit_post.group)
+                self.assertEqual(exist_post.image, try_edit_post.image)
 
     def test_post_create_page_show_correct_context(self):
         """Шаблон post_create сформирован с правильным контекстом."""
@@ -189,7 +206,7 @@ class PostsFormsTests(TestCase):
             data=form_data,
             follow=True
         )
-        created_comments = response.context['post'].comments.all()
+        created_comments = Comment.objects.all()
         self.assertEqual(len(created_comments), 1)
         self.assertEqual(Comment.objects.count(), comments_count + 1)
         self.assertRedirects(response, self.POST_DETAIL_URL,)
@@ -210,4 +227,5 @@ class PostsFormsTests(TestCase):
             follow=True
         )
         self.assertEqual(Comment.objects.count(), comments_count)
+        self.assertEqual(Comment.objects.all().count(), 0)
         self.assertEqual(self.post.comments.count(), 0)

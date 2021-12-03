@@ -19,7 +19,6 @@
   {% endif %}
   <a class="btn btn-primary" href="{% url 'posts:post_detail' post.id %}">Подробная информация</a>
 </article>
-{% if not group_list and post.group %}
+{% if records_group and post.group %}
   <p> Все записи группы: <a href="{% url 'posts:group_list' post.group.slug %}"> {{ post.group }}</a></p>
 {% endif %}
-<!-- {% if not forloop.last %}<hr>{% endif %} -->

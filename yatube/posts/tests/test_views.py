@@ -87,13 +87,12 @@ class PostsViewsTests(TestCase):
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
     def test_pages_show_correct_context(self):
-        """Страницы posts:index, posts:group_list, posts:profile, posts:post_detail,
-           posts:follow_index содержат ожидаемый контекст"""
+        '''Страницы содержат ожидаемый пост'''
         Follow.objects.create(
             user=self.user,
             author=self.author
         )
-        pages = [
+        cases = [
             [INDEX_URL, 'page_obj'],
             [GROUP_LIST_URL, 'page_obj'],
             [PROFILE_URL, 'page_obj'],
@@ -101,7 +100,7 @@ class PostsViewsTests(TestCase):
             [FOLLOW_INDEX_URL, 'page_obj'],
 
         ]
-        for url, item in pages:
+        for url, item in cases:
             with self.subTest(url=url):
                 response = self.authorized_client.get(url)
                 if item == 'page_obj':
@@ -134,12 +133,16 @@ class PostsViewsTests(TestCase):
         response = self.guest_client.get(GROUP_LIST2_URL)
         self.assertNotIn(self.post.id, response.context['page_obj'])
 
-    def test_authorized_client_following_unfollowing_author(self):
-        ''' Авторизованный пользователь может подписываться и
-        отписываться от авторов '''
-        # self.assertFalse(Follow.objects.filter(user=self.user).exists()) ?
+    def test_authorized_client_following_author(self):
+        ''' Авторизованный пользователь может подписываться на авторов '''
         self.authorized_client.get(PROFILE_FOLLOW_URL)
-        self.assertTrue(Follow.objects.filter(user=self.user).exists())
+        self.assertTrue(Follow.objects.filter(
+            user=self.user,
+            author=self.author
+        ).exists())
+
+    def test_authorized_client_unfollowing_author(self):
+        ''' Авторизованный пользователь может отписываться от авторов '''
         self.authorized_client.get(PROFILE_UNFOLLOW_URL)
         self.assertFalse(Follow.objects.filter(
             user=self.user,
@@ -147,21 +150,14 @@ class PostsViewsTests(TestCase):
         )
 
     def test_posts_with_unfollowing_on_follow_index(self):
-        ''' При отписке авторизованый пользователь не видит записи на
-        странице избранное'''
-        Follow.objects.create(
-            user=self.user,
-            author=self.author
-        )
-        self.authorized_client.get(PROFILE_UNFOLLOW_URL)
+        '''В состоянии отписки авторизованый пользователь
+        не видит записи автора на странице избранное'''
         response = self.authorized_client.get(FOLLOW_INDEX_URL)
         self.assertNotIn(self.post.id, response.context['page_obj'])
 
     def test_page_index_cache(self):
-        post = copy.copy(self.post)
-        cache.clear()
         page_content1 = self.guest_client.get(INDEX_URL).content
-        post.delete()
+        Post.objects.all().delete()
         page_content2 = self.guest_client.get(INDEX_URL).content
         self.assertEqual(page_content1, page_content2)
         cache.clear()
